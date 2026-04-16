@@ -529,8 +529,7 @@ export default function InboxPage() {
         <CardHeader className="shrink-0 border-b border-slate-100 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>客户备注</CardTitle>
-              <CardDescription>客户资料与客服备注分开记录，便于跟进，不会混入聊天流。</CardDescription>
+              <CardTitle>客户备注</CardTitle> 
             </div>
             <div className="flex items-center gap-2 xl:hidden">
               <Button onClick={handleBackToList} size="sm" type="button" variant="ghost">
@@ -619,12 +618,7 @@ export default function InboxPage() {
 
   return (
     <div className="flex min-h-[calc(100dvh-8.5rem)] flex-col gap-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] lg:pb-6 xl:min-h-0 xl:flex-1 xl:overflow-hidden xl:gap-6 xl:pb-0">
-
-      <div className="shrink-0">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">Inbox</p>
-        <h1 className="mt-2 text-2xl font-bold sm:text-3xl">会话收件箱</h1>
-        <p className="mt-2 text-sm text-slate-500">重构为“先选会话，再展开详情”的工作台。客户资料与内部备注独立记录，不再和聊天流混在一起。</p>
-      </div>
+ 
 
       <div className="hidden min-h-0 flex-1 xl:grid xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-6">
         {renderConversationList()}
