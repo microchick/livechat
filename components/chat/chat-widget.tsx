@@ -615,14 +615,22 @@ export function ChatWidget({ embedded = false, initialOpen = false }: ChatWidget
               </div>
             ) : (
               <div className="space-y-4">
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    self={message.sender_type === "user"}
-                    timestamp={format(new Date(message.created_at), "HH:mm")}
-                  />
-                ))}
+                {messages.map((message) => {
+                  const isSelfMessage = message.sender_type === "user";
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      avatarFallback={isSelfMessage ? name || "Website Visitor" : brandName}
+                      avatarLabel={isSelfMessage ? name || "Website Visitor" : brandName}
+                      avatarUrl={isSelfMessage ? session?.customerAvatarUrl || "" : avatarUrl}
+                      message={message}
+                      self={isSelfMessage}
+                      showAvatar={!isSelfMessage}
+                      showSenderName={false}
+                      timestamp={format(new Date(message.created_at), "HH:mm")}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

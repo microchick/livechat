@@ -30,6 +30,44 @@ type CustomerNoteRecord = {
 };
 
 const customerNotesStorageKey = "inbox_customer_notes";
+let inboxAudioContext: AudioContext | null = null;
+
+function playInboxNotificationTone() {
+  if (typeof window === "undefined" || typeof window.AudioContext === "undefined") {
+    return;
+  }
+
+  if (!inboxAudioContext) {
+    inboxAudioContext = new window.AudioContext();
+  }
+
+  const context = inboxAudioContext;
+  const playTone = () => {
+    const startedAt = context.currentTime + 0.01;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, startedAt);
+    oscillator.frequency.exponentialRampToValueAtTime(660, startedAt + 0.22);
+
+    gain.gain.setValueAtTime(0.0001, startedAt);
+    gain.gain.exponentialRampToValueAtTime(0.12, startedAt + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + 0.24);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startedAt);
+    oscillator.stop(startedAt + 0.26);
+  };
+
+  if (context.state === "suspended") {
+    void context.resume().then(playTone).catch(() => undefined);
+    return;
+  }
+
+  playTone();
+}
 
 function readCustomerNotes(): Record<string, CustomerNoteRecord> {
   if (typeof window === "undefined") {
@@ -76,8 +114,11 @@ export default function InboxPage() {
   const [noteDraft, setNoteDraft] = useState("");
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
+  const latestMessageKeyRef = useRef("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const {
+
     selectedConversationId,
     setSelectedConversationId,
     liveMessages,
@@ -90,7 +131,7 @@ export default function InboxPage() {
   const conversationQuery = useQuery({
     queryKey: ["conversations"],
     queryFn: () => api.get<ConversationPage>("/api/conversations?limit=20"),
-    refetchInterval: pusherClient ? false : 5000,
+    refetchInterval: 5000,
   });
 
   const conversations = useMemo(() => conversationQuery.data?.items ?? [], [conversationQuery.data]);
@@ -143,30 +184,46 @@ export default function InboxPage() {
   });
 
   useEffect(() => {
-    if (!activeConversationId || !pusherClient) return;
+    if (!pusherClient || conversations.length === 0) {
+      return;
+    }
 
     const client = pusherClient;
-    const channel = client.subscribe(`conversation_${activeConversationId}`);
+    const cleanupCallbacks: Array<() => void> = [];
 
-    const handleMessage = (payload: Message) => {
-      appendMessage(activeConversationId, payload);
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    };
+    conversations.forEach((conversation) => {
+      const conversationId = conversation.id;
+      const channel = client.subscribe(`conversation_${conversationId}`);
 
-    const handleTyping = (payload: { is_typing: boolean }) => {
-      setTyping(activeConversationId, payload.is_typing);
-      window.setTimeout(() => setTyping(activeConversationId, false), 1800);
-    };
+      const handleMessage = (payload: Message) => {
+        if (conversationId === activeConversationId) {
+          appendMessage(conversationId, payload);
+        }
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      };
 
-    channel.bind("new_message", handleMessage);
-    channel.bind("typing", handleTyping);
+      const handleTyping = (payload: { is_typing: boolean }) => {
+        if (conversationId !== activeConversationId) {
+          return;
+        }
+        setTyping(conversationId, payload.is_typing);
+        window.setTimeout(() => setTyping(conversationId, false), 1800);
+      };
+
+      channel.bind("new_message", handleMessage);
+      channel.bind("typing", handleTyping);
+
+      cleanupCallbacks.push(() => {
+        channel.unbind("new_message", handleMessage);
+        channel.unbind("typing", handleTyping);
+        client.unsubscribe(`conversation_${conversationId}`);
+      });
+    });
 
     return () => {
-      channel.unbind("new_message", handleMessage);
-      channel.unbind("typing", handleTyping);
-      client.unsubscribe(`conversation_${activeConversationId}`);
+      cleanupCallbacks.forEach((cleanup) => cleanup());
     };
-  }, [activeConversationId, appendMessage, pusherClient, queryClient, setTyping]);
+  }, [activeConversationId, appendMessage, conversations, pusherClient, queryClient, setTyping]);
 
   const mergedMessages = useMemo(() => {
     const currentMessages = messagesQuery.data?.items ?? [];
@@ -187,6 +244,42 @@ export default function InboxPage() {
     itemCount: mergedMessages.length,
     resetKey: activeConversationId ?? null,
   });
+
+  useEffect(() => {
+    const currentUnreadMap = Object.fromEntries(conversations.map((conversation) => [conversation.id, conversation.unread_count]));
+    const previousUnreadMap = previousUnreadMapRef.current;
+
+    if (previousUnreadMap) {
+      const hasNewUnread = conversations.some((conversation) => conversation.unread_count > (previousUnreadMap[conversation.id] ?? 0));
+      if (hasNewUnread) {
+        playInboxNotificationTone();
+      }
+    }
+
+    previousUnreadMapRef.current = currentUnreadMap;
+  }, [conversations]);
+
+  useEffect(() => {
+    if (!activeConversationId || mergedMessages.length === 0) {
+      latestMessageKeyRef.current = "";
+      return;
+    }
+
+    const latestMessageId = mergedMessages[mergedMessages.length - 1]?.id;
+    if (!latestMessageId) {
+      return;
+    }
+
+    const nextMessageKey = `${activeConversationId}:${latestMessageId}`;
+    const isNewTailMessage = latestMessageKeyRef.current !== "" && latestMessageKeyRef.current !== nextMessageKey;
+    latestMessageKeyRef.current = nextMessageKey;
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom(isNewTailMessage ? "smooth" : "auto");
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeConversationId, mergedMessages, scrollToBottom]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {

@@ -4,8 +4,16 @@ export const dynamic = "force-dynamic";
 
 export default function WidgetPage() {
   return (
-    <main className="h-[100dvh] w-full overflow-hidden bg-transparent">
-      <ChatWidget embedded />
-    </main>
+    <>
+      <style>{`
+        html, body {
+          background: transparent !important;
+          background-image: none !important;
+        }
+      `}</style>
+      <main className="h-[100dvh] w-full overflow-hidden bg-transparent">
+        <ChatWidget embedded />
+      </main>
+    </>
   );
 }

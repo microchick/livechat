@@ -173,9 +173,18 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-4 rounded-[1.5rem] bg-white/95 p-4 text-slate-900">
-                  <div className="max-w-[85%] rounded-3xl bg-slate-100 px-4 py-3 text-sm shadow-sm">
-                    <p className="leading-6">{previewWelcomeMessage}</p>
-                    <p className="mt-2 text-xs text-slate-400">{previewBrandName} · now</p>
+                  <div className="flex items-end gap-3">
+                    {avatarUrl.trim() ? (
+                      <img alt={previewBrandName} className="h-9 w-9 shrink-0 rounded-full border border-slate-200/80 object-cover shadow-sm" src={avatarUrl.trim()} />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-sm">
+                        {previewBrandName.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="max-w-[85%] rounded-3xl bg-slate-100 px-4 py-3 text-sm shadow-sm">
+                      <p className="leading-6">{previewWelcomeMessage}</p>
+                      <p className="mt-2 text-xs text-slate-400">now</p>
+                    </div>
                   </div>
                   <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">Visitor sends the first message here...</div>
                 </div>
