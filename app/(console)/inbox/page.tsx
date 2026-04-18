@@ -116,7 +116,9 @@ export default function InboxPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
   const latestMessageKeyRef = useRef("");
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+
   const {
 
     selectedConversationId,
@@ -245,8 +247,21 @@ export default function InboxPage() {
     resetKey: activeConversationId ?? null,
   });
 
+  function scrollChatToBottom(behavior: ScrollBehavior = "auto") {
+    const run = (nextBehavior: ScrollBehavior) => {
+      scrollToBottom(nextBehavior);
+      bottomAnchorRef.current?.scrollIntoView({ block: "end", behavior: nextBehavior });
+    };
+
+    window.requestAnimationFrame(() => {
+      run(behavior);
+      window.requestAnimationFrame(() => run("auto"));
+    });
+  }
+
   useEffect(() => {
     const currentUnreadMap = Object.fromEntries(conversations.map((conversation) => [conversation.id, conversation.unread_count]));
+
     const previousUnreadMap = previousUnreadMapRef.current;
 
     if (previousUnreadMap) {
@@ -273,13 +288,8 @@ export default function InboxPage() {
     const nextMessageKey = `${activeConversationId}:${latestMessageId}`;
     const isNewTailMessage = latestMessageKeyRef.current !== "" && latestMessageKeyRef.current !== nextMessageKey;
     latestMessageKeyRef.current = nextMessageKey;
-
-    const frameId = window.requestAnimationFrame(() => {
-      scrollToBottom(isNewTailMessage ? "smooth" : "auto");
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [activeConversationId, mergedMessages, scrollToBottom]);
+    scrollChatToBottom(isNewTailMessage ? "smooth" : "auto");
+  }, [activeConversationId, mergedMessages]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -314,8 +324,9 @@ export default function InboxPage() {
       }
       queryClient.setQueryData<MessagePage>(["messages", activeConversationId], (previous: MessagePage | undefined) => appendMessagePage(previous, message));
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      window.requestAnimationFrame(() => scrollToBottom("auto"));
+      scrollChatToBottom("auto");
     },
+
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "消息发送失败");
     },
@@ -539,7 +550,9 @@ export default function InboxPage() {
                 <MessageBubble key={message.id} message={message} self={message.sender_type !== "user"} timestamp={format(new Date(message.created_at), "HH:mm")} />
               ))}
               {activeConversationId && typingConversationIds[activeConversationId] ? <div className="text-sm text-slate-400">对方正在输入...</div> : null}
+              <div ref={bottomAnchorRef} className="h-px w-full" />
             </div>
+
           )}
         </div>
 
