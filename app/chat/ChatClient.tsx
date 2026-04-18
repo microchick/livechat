@@ -318,6 +318,9 @@ export default function ChatClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const latestMessageKeyRef = useRef("");
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+
   const locale = useMemo(() => normalizeLocale(searchParams.get("lang") ?? searchParams.get("locale")), [searchParams]);
   const boundCustomer = useMemo(() => buildBoundCustomer(searchParams), [searchParams]);
   const t = copy[locale];
@@ -416,7 +419,21 @@ export default function ChatClient() {
     itemCount: messages.length,
     resetKey: session?.conversationId ?? null,
   });
+
+  function scrollChatToBottom(behavior: ScrollBehavior = "auto") {
+    const run = (nextBehavior: ScrollBehavior) => {
+      scrollToBottom(nextBehavior);
+      bottomAnchorRef.current?.scrollIntoView({ block: "end", behavior: nextBehavior });
+    };
+
+    window.requestAnimationFrame(() => {
+      run(behavior);
+      window.requestAnimationFrame(() => run("auto"));
+    });
+  }
+
   const widgetSettings = widgetSettingsQuery.data ?? fallbackWidgetSettings;
+
   const supportAvatarUrl = widgetSettings.avatar_url?.trim() || "";
   const supportLabel = widgetSettings.brand_name?.trim() || "Support";
   const visitorAvatarUrl = session?.customerAvatarUrl || boundCustomer?.avatarUrl || "";
@@ -434,7 +451,25 @@ export default function ChatClient() {
     setSession(null);
   }, [messagesQuery.error, t.sessionExpired]);
 
+  useEffect(() => {
+    if (!session?.conversationId || messages.length === 0) {
+      latestMessageKeyRef.current = "";
+      return;
+    }
+
+    const latestMessageId = messages[messages.length - 1]?.id;
+    if (!latestMessageId) {
+      return;
+    }
+
+    const nextMessageKey = `${session.conversationId}:${latestMessageId}`;
+    const isNewTailMessage = latestMessageKeyRef.current !== "" && latestMessageKeyRef.current !== nextMessageKey;
+    latestMessageKeyRef.current = nextMessageKey;
+    scrollChatToBottom(isNewTailMessage ? "smooth" : "auto");
+  }, [messages, session?.conversationId]);
+
   const createSessionMutation = useMutation({
+
     mutationFn: () =>
       api.post<VisitorSessionResponse>(
         "/api/public/session",
@@ -473,8 +508,9 @@ export default function ChatClient() {
       });
 
 
-      window.requestAnimationFrame(() => scrollToBottom("auto"));
+      scrollChatToBottom("auto");
       toast.success(t.sessionCreatedToast);
+
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : t.createSessionFailed);
@@ -868,9 +904,9 @@ export default function ChatClient() {
                     />
                   );
                 })}
-
-
+                <div ref={bottomAnchorRef} className="h-px w-full" />
               </div>
+
             )}
           </div>
 
@@ -919,7 +955,8 @@ export default function ChatClient() {
               ) : null}
 
               <textarea
-                className="min-h-[72px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:min-h-[96px] lg:min-h-[120px]"
+                className="min-h-[56px] max-h-[24dvh] w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:min-h-[96px] lg:min-h-[120px]"
+
                 disabled={!session || sendMessageMutation.isPending}
                 placeholder={session ? t.composerPlaceholder : t.composerLockedPlaceholder}
                 value={composer}

@@ -516,7 +516,7 @@ export default function InboxPage() {
 
   function renderChatPanel() {
     return (
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Card className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <CardHeader className="shrink-0 border-b border-slate-100 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -556,8 +556,8 @@ export default function InboxPage() {
           )}
         </div>
 
-        <div className="shrink-0 border-t border-slate-100 bg-white p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4">
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+        <div className="shrink-0 border-t border-slate-100 bg-white p-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
             <input
               accept="image/png,image/jpeg,image/gif,image/webp"
               className="hidden"
@@ -582,7 +582,8 @@ export default function InboxPage() {
             ) : null}
 
             <textarea
-              className="min-h-[72px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:min-h-[96px] lg:min-h-[120px]"
+              className="min-h-[56px] max-h-[24dvh] w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:min-h-[96px] lg:min-h-[120px]"
+
               placeholder="输入消息，回车发送，Shift + Enter 换行"
               value={composer}
               onChange={(event) => {
@@ -742,7 +743,8 @@ export default function InboxPage() {
         {!activeConversationId || mobilePanel === "list" ? (
           renderConversationList()
         ) : (
-          <div className="flex min-h-0 w-full flex-col gap-4">
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
+
             <div className="grid shrink-0 grid-cols-2 gap-2 rounded-3xl border border-slate-200 bg-white p-1 shadow-soft">
               <button
                 className={cn(
@@ -766,7 +768,8 @@ export default function InboxPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1">{mobilePanel === "chat" ? renderChatPanel() : renderNotesPanel()}</div>
+            <div className="flex min-h-0 flex-1 overflow-hidden">{mobilePanel === "chat" ? renderChatPanel() : renderNotesPanel()}</div>
+
           </div>
         )}
       </div>
