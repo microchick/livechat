@@ -57,6 +57,8 @@ export interface Message {
   content: string;
   media_url?: string;
   media_key?: string;
+  edited_at?: string;
+  recalled_at?: string;
   created_at: string;
 }
 

@@ -313,6 +313,16 @@ function appendMessagePage(previous: MessagePage | undefined, message: Message):
   };
 }
 
+function updateMessagePage(previous: MessagePage | undefined, message: Message): MessagePage {
+  const items = previous?.items ?? [];
+  return {
+    items: items
+      .map((item) => (item.id === message.id ? message : item))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    next_cursor: previous?.next_cursor,
+  };
+}
+
 export default function ChatClient() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -474,11 +484,19 @@ export default function ChatClient() {
       }
     };
 
+    const handleMessageUpdated = (payload: Message) => {
+      queryClient.setQueryData<MessagePage>(["public-messages", session.conversationId], (previous: MessagePage | undefined) =>
+        updateMessagePage(previous, payload),
+      );
+    };
+
     channel.bind("new_message", handleMessage);
+    channel.bind("message_updated", handleMessageUpdated);
     channel.bind("typing", handleTyping);
 
     return () => {
       channel.unbind("new_message", handleMessage);
+      channel.unbind("message_updated", handleMessageUpdated);
       channel.unbind("typing", handleTyping);
       pusherClient.unsubscribe(`conversation_${session.conversationId}`);
       setAgentTyping(false);

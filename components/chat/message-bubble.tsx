@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
 
@@ -10,6 +12,7 @@ type MessageBubbleProps = {
   avatarUrl?: string;
   avatarLabel?: string;
   avatarFallback?: string;
+  footerActions?: ReactNode;
 };
 
 function buildAvatarFallback(value: string) {
@@ -59,10 +62,13 @@ export function MessageBubble({
   avatarUrl,
   avatarLabel,
   avatarFallback,
+  footerActions,
 }: MessageBubbleProps) {
   const type = message.message_type ?? (message.media_url ? "image" : "text");
   const senderLabel = message.sender_name || message.sender_type;
-  const metaText = showSenderName ? `${senderLabel} · ${timestamp}` : timestamp;
+  const isRecalled = Boolean(message.recalled_at);
+  const statusText = [timestamp, message.edited_at && !isRecalled ? "已编辑" : ""].filter(Boolean).join(" · ");
+  const metaText = showSenderName ? `${senderLabel} · ${statusText}` : statusText;
   const resolvedAvatarLabel = avatarLabel || senderLabel;
   const resolvedAvatarFallback = buildAvatarFallback(avatarFallback || resolvedAvatarLabel);
 
@@ -73,10 +79,12 @@ export function MessageBubble({
         className={cn(
           "max-w-[85%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[80%]",
           self ? "bg-slate-900 text-white" : "bg-white text-slate-800",
-          type === "image" ? "overflow-hidden p-2" : "",
+          type === "image" && !isRecalled ? "overflow-hidden p-2" : "",
         )}
       >
-        {type === "image" && message.media_url ? (
+        {isRecalled ? (
+          <p className={cn("leading-6 italic", self ? "text-slate-200" : "text-slate-500")}>{message.content || "该消息已撤回"}</p>
+        ) : type === "image" && message.media_url ? (
           <div className="space-y-3">
             <a href={message.media_url} rel="noreferrer" target="_blank">
               <img alt={message.content || "chat image"} className="max-h-72 w-full rounded-2xl object-cover" src={message.media_url} />
@@ -89,7 +97,10 @@ export function MessageBubble({
           <p className="leading-6">{message.content}</p>
         )}
 
-        <p className={cn("mt-2 text-xs", self ? "text-slate-300" : "text-slate-400")}>{metaText}</p>
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <p className={cn("text-xs", self ? "text-slate-300" : "text-slate-400")}>{metaText}</p>
+          {footerActions ? <div className="shrink-0">{footerActions}</div> : null}
+        </div>
       </div>
       {self && showAvatar ? <MessageAvatar fallback={resolvedAvatarFallback} label={resolvedAvatarLabel} self={self} url={avatarUrl} /> : null}
     </div>

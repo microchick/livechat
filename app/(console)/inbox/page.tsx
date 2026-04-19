@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ArrowLeft, ImagePlus, Loader2, SendHorizonal, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Loader2, SendHorizonal, SquarePen, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -106,6 +106,16 @@ function appendMessagePage(previous: MessagePage | undefined, message: Message):
   };
 }
 
+function updateMessagePage(previous: MessagePage | undefined, message: Message): MessagePage {
+  const items = previous?.items ?? [];
+  return {
+    items: items
+      .map((item) => (item.id === message.id ? message : item))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    next_cursor: previous?.next_cursor,
+  };
+}
+
 function CategoryBadge({ category }: { category?: Category | null }) {
   if (!category) {
     return <Badge>未分类</Badge>;
@@ -127,6 +137,8 @@ export default function InboxPage() {
   const [customerNotes, setCustomerNotes] = useState<Record<string, CustomerNoteRecord>>({});
 
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState("");
+  const [editingMessageDraft, setEditingMessageDraft] = useState("");
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
@@ -186,6 +198,27 @@ export default function InboxPage() {
   }, [conversations, selectedConversationId, setSelectedConversationId]);
 
   useEffect(() => {
+    const resumeAudio = () => {
+      if (typeof window === "undefined" || typeof window.AudioContext === "undefined") {
+        return;
+      }
+      if (!inboxAudioContext) {
+        inboxAudioContext = new window.AudioContext();
+      }
+      if (inboxAudioContext.state === "suspended") {
+        void inboxAudioContext.resume().catch(() => undefined);
+      }
+    };
+
+    window.addEventListener("pointerdown", resumeAudio, { passive: true });
+    window.addEventListener("keydown", resumeAudio);
+    return () => {
+      window.removeEventListener("pointerdown", resumeAudio);
+      window.removeEventListener("keydown", resumeAudio);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedCustomer) {
       setNoteDraft("");
       return;
@@ -224,7 +257,16 @@ export default function InboxPage() {
       const handleMessage = (payload: Message) => {
         if (conversationId === activeConversationId) {
           appendMessage(conversationId, payload);
+          scrollChatToBottom("smooth");
         }
+        if (payload.sender_type === "user") {
+          playInboxNotificationTone();
+        }
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      };
+
+      const handleMessageUpdated = (payload: Message) => {
+        queryClient.setQueryData<MessagePage>(["messages", conversationId], (previous: MessagePage | undefined) => updateMessagePage(previous, payload));
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       };
 
@@ -237,10 +279,12 @@ export default function InboxPage() {
       };
 
       channel.bind("new_message", handleMessage);
+      channel.bind("message_updated", handleMessageUpdated);
       channel.bind("typing", handleTyping);
 
       cleanupCallbacks.push(() => {
         channel.unbind("new_message", handleMessage);
+        channel.unbind("message_updated", handleMessageUpdated);
         channel.unbind("typing", handleTyping);
         client.unsubscribe(`conversation_${conversationId}`);
       });
@@ -303,7 +347,7 @@ export default function InboxPage() {
 
     const previousUnreadMap = previousUnreadMapRef.current;
 
-    if (previousUnreadMap) {
+    if (previousUnreadMap && !pusherClient) {
       const hasNewUnread = conversations.some((conversation) => conversation.unread_count > (previousUnreadMap[conversation.id] ?? 0));
       if (hasNewUnread) {
         playInboxNotificationTone();
@@ -311,7 +355,7 @@ export default function InboxPage() {
     }
 
     previousUnreadMapRef.current = currentUnreadMap;
-  }, [conversations]);
+  }, [conversations, pusherClient]);
 
   useEffect(() => {
     if (!activeConversationId || mergedMessages.length === 0) {
@@ -329,6 +373,13 @@ export default function InboxPage() {
     latestMessageKeyRef.current = nextMessageKey;
     scrollChatToBottom(isNewTailMessage ? "smooth" : "auto");
   }, [activeConversationId, mergedMessages]);
+
+  useEffect(() => {
+    if (!activeConversationId || messagesQuery.isLoading) {
+      return;
+    }
+    scrollChatToBottom("auto");
+  }, [activeConversationId, messagesQuery.data?.items?.length, messagesQuery.isLoading]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -368,6 +419,36 @@ export default function InboxPage() {
 
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "消息发送失败");
+    },
+  });
+
+  const updateMessageMutation = useMutation({
+    mutationFn: ({ messageId, content }: { messageId: string; content: string }) => api.patch<Message>(`/api/messages/${messageId}`, { content }),
+    onSuccess: (message) => {
+      queryClient.setQueryData<MessagePage>(["messages", activeConversationId], (previous: MessagePage | undefined) => updateMessagePage(previous, message));
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      setEditingMessageId("");
+      setEditingMessageDraft("");
+      toast.success("消息已更新");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "更新消息失败");
+    },
+  });
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: (messageId: string) => api.delete<Message>(`/api/messages/${messageId}`),
+    onSuccess: (message) => {
+      queryClient.setQueryData<MessagePage>(["messages", activeConversationId], (previous: MessagePage | undefined) => updateMessagePage(previous, message));
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (editingMessageId === message.id) {
+        setEditingMessageId("");
+        setEditingMessageDraft("");
+      }
+      toast.success("消息已撤回");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "撤回消息失败");
     },
   });
 
@@ -496,6 +577,36 @@ export default function InboxPage() {
   }
 
   const canSendMessage = composer.trim().length > 0 || Boolean(pendingImage);
+
+  function recallMessage(messageId: string) {
+    if (!window.confirm("确定要撤回这条消息吗？")) {
+      return;
+    }
+    deleteMessageMutation.mutate(messageId);
+  }
+
+  function startEditingMessage(message: Message) {
+    if (message.recalled_at) {
+      return;
+    }
+    setEditingMessageId(message.id);
+    setEditingMessageDraft(message.content ?? "");
+  }
+
+  function cancelEditingMessage() {
+    setEditingMessageId("");
+    setEditingMessageDraft("");
+  }
+
+  function submitEditingMessage() {
+    if (!editingMessageId) {
+      return;
+    }
+    updateMessageMutation.mutate({
+      messageId: editingMessageId,
+      content: editingMessageDraft,
+    });
+  }
 
   function handleCategoryChange(categoryId: string) {
     if (!activeConversationId) {
@@ -632,9 +743,62 @@ export default function InboxPage() {
             <div className="flex h-full items-center justify-center text-slate-400">当前会话还没有消息</div>
           ) : (
             <div className="space-y-4 pb-2">
-              {mergedMessages.map((message) => (
-                <MessageBubble key={message.id} message={message} self={message.sender_type !== "user"} timestamp={format(new Date(message.created_at), "HH:mm")} />
-              ))}
+              {mergedMessages.map((message) => {
+                const isSelf = message.sender_type !== "user";
+                const isEditing = editingMessageId === message.id;
+                const canMutateMessage = isSelf && !message.recalled_at;
+
+                if (isEditing) {
+                  return (
+                    <div key={message.id} className="ml-auto max-w-[85%] rounded-3xl bg-white p-3 shadow-sm sm:max-w-[80%]">
+                      <textarea
+                        className="min-h-[96px] w-full resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-300"
+                        onChange={(event) => setEditingMessageDraft(event.target.value)}
+                        value={editingMessageDraft}
+                      />
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button onClick={cancelEditingMessage} size="sm" type="button" variant="ghost">
+                          取消
+                        </Button>
+                        <Button disabled={updateMessageMutation.isPending || editingMessageDraft.trim().length === 0} onClick={submitEditingMessage} size="sm" type="button">
+                          {updateMessageMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          保存
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <MessageBubble
+                    footerActions={
+                      canMutateMessage ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            className="rounded-full p-1 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                            onClick={() => startEditingMessage(message)}
+                            type="button"
+                          >
+                            <SquarePen className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            className="rounded-full p-1 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                            disabled={deleteMessageMutation.isPending}
+                            onClick={() => recallMessage(message.id)}
+                            type="button"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : null
+                    }
+                    key={message.id}
+                    message={message}
+                    self={isSelf}
+                    timestamp={format(new Date(message.created_at), "HH:mm")}
+                  />
+                );
+              })}
               {activeConversationId && typingConversationIds[activeConversationId] ? <div className="text-sm text-slate-400">对方正在输入...</div> : null}
               <div ref={bottomAnchorRef} className="h-px w-full" />
             </div>
