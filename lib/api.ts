@@ -58,6 +58,12 @@ export const api = {
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+  patch: <T>(path: string, body?: unknown, init?: ApiRequestInit) =>
+    apiRequest<T>(path, {
+      ...init,
+      method: "PATCH",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
   postForm: <T>(path: string, body: FormData, init?: ApiRequestInit) =>
     apiRequest<T>(path, {
       ...init,
@@ -65,3 +71,4 @@ export const api = {
       body,
     }),
 };
+

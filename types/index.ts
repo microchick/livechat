@@ -27,15 +27,25 @@ export interface Customer {
   recent_behavior?: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  color: string;
+  sort: number;
+}
+
 export interface Conversation {
   id: string;
   customer_id: string;
   assigned_agent_id?: string;
+  category_id?: string;
   last_message: string;
   unread_count: number;
   updated_at: string;
   customer: Customer;
+  category?: Category | null;
 }
+
 
 export interface Message {
   id: string;
@@ -90,6 +100,11 @@ export interface ConversationPage {
   items: Conversation[];
   next_cursor?: string;
 }
+
+export interface CategoryPage {
+  items: Category[];
+}
+
 
 export interface CustomerPage {
   items: Customer[];

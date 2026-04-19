@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import { getPusherClient } from "@/lib/pusher";
 import { cn } from "@/lib/utils";
 import { useInboxStore } from "@/store/inbox-store";
-import type { Conversation, ConversationPage, ImageUploadPrepareResponse, Message, MessagePage, UploadImageResponse } from "@/types";
+import type { Category, CategoryPage, Conversation, ConversationPage, ImageUploadPrepareResponse, Message, MessagePage, UploadImageResponse } from "@/types";
 
 type MobilePanel = "list" | "chat" | "notes";
 
@@ -106,11 +106,26 @@ function appendMessagePage(previous: MessagePage | undefined, message: Message):
   };
 }
 
+function CategoryBadge({ category }: { category?: Category | null }) {
+  if (!category) {
+    return <Badge>未分类</Badge>;
+  }
+
+  return (
+    <Badge className="border-transparent text-white" style={{ backgroundColor: category.color }}>
+      {category.name}
+    </Badge>
+  );
+}
+
 export default function InboxPage() {
+
   const queryClient = useQueryClient();
   const [composer, setComposer] = useState("");
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("list");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [customerNotes, setCustomerNotes] = useState<Record<string, CustomerNoteRecord>>({});
+
   const [noteDraft, setNoteDraft] = useState("");
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -130,9 +145,18 @@ export default function InboxPage() {
   } = useInboxStore();
   const pusherClient = useMemo(() => getPusherClient(), []);
 
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api.get<CategoryPage>("/api/categories"),
+  });
+  const categories = useMemo(() => categoriesQuery.data?.items ?? [], [categoriesQuery.data]);
+
   const conversationQuery = useQuery({
-    queryKey: ["conversations"],
-    queryFn: () => api.get<ConversationPage>("/api/conversations?limit=20"),
+    queryKey: ["conversations", categoryFilter],
+    queryFn: () =>
+      api.get<ConversationPage>(
+        `/api/conversations?limit=20${categoryFilter ? `&category_id=${encodeURIComponent(categoryFilter)}` : ""}`,
+      ),
     refetchInterval: 5000,
   });
 
@@ -246,6 +270,21 @@ export default function InboxPage() {
     itemCount: mergedMessages.length,
     resetKey: activeConversationId ?? null,
   });
+
+  const updateConversationCategoryMutation = useMutation({
+    mutationFn: ({ conversationId, categoryId }: { conversationId: string; categoryId: string }) =>
+      api.patch<Conversation>(`/api/conversations/${conversationId}/category`, {
+        category_id: categoryId || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("会话分类已更新");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "更新会话分类失败");
+    },
+  });
+
 
   function scrollChatToBottom(behavior: ScrollBehavior = "auto") {
     const run = (nextBehavior: ScrollBehavior) => {
@@ -458,13 +497,41 @@ export default function InboxPage() {
 
   const canSendMessage = composer.trim().length > 0 || Boolean(pendingImage);
 
+  function handleCategoryChange(categoryId: string) {
+    if (!activeConversationId) {
+      return;
+    }
+
+    updateConversationCategoryMutation.mutate({
+      conversationId: activeConversationId,
+      categoryId,
+    });
+  }
+
   function renderConversationList() {
     return (
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CardHeader className="shrink-0 border-b border-slate-100 pb-4">
           <CardTitle>会话列表</CardTitle>
-          <CardDescription>这里只保留会话入口，点击某个客户后再展开聊天内容和客户备注。</CardDescription>
+          <CardDescription>按会话分类筛选并进入聊天详情，分类不再依赖客户标签。</CardDescription>
+          <div className="mt-4">
+            <label className="mb-2 block text-xs font-medium text-slate-500">分类筛选</label>
+            <select
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-300"
+              disabled={categoriesQuery.isLoading}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              value={categoryFilter}
+            >
+              <option value="">全部会话</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </CardHeader>
+
         <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           {conversationQuery.isLoading ? (
             <div className="flex h-48 items-center justify-center text-slate-500">
@@ -502,7 +569,10 @@ export default function InboxPage() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-400">
-                    <span className="truncate">{conversation.customer.source}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{conversation.customer.source}</span>
+                      <CategoryBadge category={conversation.category} />
+                    </div>
                     <span>{format(new Date(conversation.updated_at), "MM-dd HH:mm")}</span>
                   </div>
                 </button>
@@ -524,6 +594,22 @@ export default function InboxPage() {
               <CardDescription className="mt-1 truncate">
                 {[selectedCustomer?.source, selectedCustomer?.email].filter(Boolean).join(" · ") || "当前客户暂无更多基础信息"}
               </CardDescription>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <CategoryBadge category={selectedConversation?.category} />
+              <select
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none transition focus:border-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!activeConversationId || categoriesQuery.isLoading || updateConversationCategoryMutation.isPending}
+                onChange={(event) => handleCategoryChange(event.target.value)}
+                value={selectedConversation?.category_id ?? ""}
+              >
+                <option value="">Uncategorized</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center gap-2 xl:hidden">
               <Button onClick={handleBackToList} size="sm" type="button" variant="ghost">
