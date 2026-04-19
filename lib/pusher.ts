@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 let pusherClient: Pusher | null = null;
 
 export function getPusherClient() {
-  if (!env.pusherKey) {
+  if (typeof window === "undefined" || !env.pusherKey) {
     return null;
   }
 
