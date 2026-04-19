@@ -64,6 +64,11 @@ export const api = {
       method: "PATCH",
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+  delete: <T>(path: string, init?: ApiRequestInit) =>
+    apiRequest<T>(path, {
+      ...init,
+      method: "DELETE",
+    }),
   postForm: <T>(path: string, body: FormData, init?: ApiRequestInit) =>
     apiRequest<T>(path, {
       ...init,

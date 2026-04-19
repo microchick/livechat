@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageCircleMore, Save } from "lucide-react";
+import { Loader2, MessageCircleMore, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,10 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import type { WidgetSettings } from "@/types";
+import type { Category, CategoryPage, WidgetSettings } from "@/types";
 
 const defaultBrandName = "Support assistant";
 const defaultWelcomeMessage = "Hello! Thank you for reaching out to us. How can I assist you today?";
+
+type CategoryDraft = {
+  id: string;
+  name: string;
+  color: string;
+  sort: number;
+};
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -20,10 +27,18 @@ export default function SettingsPage() {
   const [brandName, setBrandName] = useState(defaultBrandName);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState(defaultWelcomeMessage);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
+  const [newCategorySort, setNewCategorySort] = useState("0");
+  const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([]);
 
   const settingsQuery = useQuery({
     queryKey: ["widget-settings"],
     queryFn: () => api.get<WidgetSettings>("/api/widget-settings"),
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api.get<CategoryPage>("/api/categories"),
   });
 
   useEffect(() => {
@@ -36,6 +51,21 @@ export default function SettingsPage() {
     setAvatarUrl(settingsQuery.data.avatar_url || "");
     setWelcomeMessage(settingsQuery.data.welcome_message || defaultWelcomeMessage);
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (!categoriesQuery.data) {
+      return;
+    }
+
+    setCategoryDrafts(
+      categoriesQuery.data.items.map((category) => ({
+        id: category.id,
+        name: category.name,
+        color: category.color,
+        sort: category.sort,
+      })),
+    );
+  }, [categoriesQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -54,10 +84,69 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : "保存失败");
     },
   });
+  const createCategoryMutation = useMutation({
+    mutationFn: () =>
+      api.post<Category>("/api/categories", {
+        name: newCategoryName.trim(),
+        color: newCategoryColor.trim(),
+        sort: Number(newCategorySort) || 0,
+      }),
+    onSuccess: () => {
+      setNewCategoryName("");
+      setNewCategoryColor("#2563EB");
+      setNewCategorySort("0");
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("分类已创建");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "创建分类失败");
+    },
+  });
+  const updateCategoryMutation = useMutation({
+    mutationFn: (draft: CategoryDraft) =>
+      api.patch<Category>(`/api/categories/${draft.id}`, {
+        name: draft.name.trim(),
+        color: draft.color.trim(),
+        sort: Number(draft.sort) || 0,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("分类已更新");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "更新分类失败");
+    },
+  });
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => api.delete<{ ok: boolean }>(`/api/categories/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("分类已删除");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "删除分类失败");
+    },
+  });
 
   const isSaving = saveMutation.isPending;
   const previewBrandName = brandName.trim() || defaultBrandName;
   const previewWelcomeMessage = welcomeMessage.trim() || defaultWelcomeMessage;
+
+  function updateCategoryDraft(id: string, field: keyof Omit<CategoryDraft, "id">, value: string) {
+    setCategoryDrafts((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              [field]: field === "sort" ? Number(value) || 0 : value,
+            }
+          : item,
+      ),
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -197,6 +286,62 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>会话分类管理</CardTitle>
+          <CardDescription>在这里维护客服工作台可用的会话分类，新增后可直接在 Inbox 中筛选和分配。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1.2fr)_180px_120px_auto]">
+            <Input placeholder="分类名称" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} />
+            <Input placeholder="#2563EB" value={newCategoryColor} onChange={(event) => setNewCategoryColor(event.target.value)} />
+            <Input placeholder="排序" value={newCategorySort} onChange={(event) => setNewCategorySort(event.target.value)} />
+            <Button
+              disabled={!newCategoryName.trim() || !newCategoryColor.trim() || createCategoryMutation.isPending}
+              onClick={() => createCategoryMutation.mutate()}
+              type="button"
+            >
+              {createCategoryMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              新增分类
+            </Button>
+          </div>
+
+          {categoriesQuery.isLoading ? (
+            <div className="flex h-28 items-center justify-center rounded-3xl border border-dashed border-slate-200 text-sm text-slate-400">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载分类...
+            </div>
+          ) : categoryDrafts.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              暂无会话分类，先创建一个吧。
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {categoryDrafts.map((category) => (
+                <div key={category.id} className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1.2fr)_180px_120px_auto_auto]">
+                  <Input value={category.name} onChange={(event) => updateCategoryDraft(category.id, "name", event.target.value)} />
+                  <Input value={category.color} onChange={(event) => updateCategoryDraft(category.id, "color", event.target.value)} />
+                  <Input value={String(category.sort)} onChange={(event) => updateCategoryDraft(category.id, "sort", event.target.value)} />
+                  <Button disabled={updateCategoryMutation.isPending} onClick={() => updateCategoryMutation.mutate(category)} type="button" variant="secondary">
+                    {updateCategoryMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    保存
+                  </Button>
+                  <Button
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    disabled={deleteCategoryMutation.isPending}
+                    onClick={() => deleteCategoryMutation.mutate(category.id)}
+                    type="button"
+                    variant="outline"
+                  >
+                    {deleteCategoryMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    删除
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
