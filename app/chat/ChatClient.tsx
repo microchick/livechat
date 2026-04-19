@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import type { ImageUploadPrepareResponse, Message, MessagePage, UploadImageResponse, VisitorSessionResponse, WidgetSettings } from "@/types";
 
 const visitorSessionStorageKey = "chat_visitor_session";
-const quickEmojis = ["😀", "🥳", "😍", "👍", "🙏", "❤️", "🎉", "😄"];
+const quickEmojis = ["😊", "👍", "🙏", "🎉", "❤️", "😄", "👋", "🤝"];
 
 type Locale = "en" | "zh";
 
@@ -66,7 +66,7 @@ const copy = {
     consoleEntryTitle: "Agent console",
     consoleEntryBody: "Use the console to manage the visitor conversation in real time.",
     openConsole: "Open console",
-    urlHint: "Language can also be switched via URL: append `?lang=zh` to view Chinese.",
+    urlHint: "Language can also be switched via URL: append ?lang=zh to view Chinese.",
     nameLabel: "Name",
     emailLabel: "Email",
     firstMessageLabel: "First message",
@@ -76,7 +76,6 @@ const copy = {
     boundIdentityBody: "This chat was opened from your store. We already know which member is contacting support, so you only need to describe the issue.",
     externalUserIdLabel: "User ID",
     sessionReadyTitle: "You are connected",
-
     visitorLabel: "Visitor",
     sessionIdLabel: "Conversation ID",
     noEmail: "Not provided",
@@ -109,16 +108,16 @@ const copy = {
     imageSelectedToast: "Photo selected. Tap send to upload and send it.",
   },
   zh: {
-    eyebrow: "Live Chat",
-    title: "在线联系客服",
-    description: "先在这里发起咨询，再去客服工作台继续处理这条会话。",
+    eyebrow: "在线聊天",
+    title: "实时联系在线客服",
+    description: "先在这里发起咨询，再到客服工作台继续处理这条会话。",
     languageLabel: "语言",
     introTitle: "使用方式",
-    introBody: "先在这里发送第一条消息，再到客服端工作台继续跟进这条会话。",
+    introBody: "先在这里发送第一条消息，再到客服工作台继续跟进这条会话。",
     consoleEntryTitle: "客服工作台",
-    consoleEntryBody: "客服侧可以实时接收并处理当前访客会话。",
+    consoleEntryBody: "客服端可以实时接收并处理当前访客会话。",
     openConsole: "打开工作台",
-    urlHint: "也支持通过 URL 切换语言：加上 `?lang=zh` 即可切到中文。",
+    urlHint: "也支持通过 URL 切换语言：追加 ?lang=zh 即可切换到中文。",
     nameLabel: "昵称",
     emailLabel: "邮箱",
     firstMessageLabel: "第一条消息",
@@ -128,7 +127,6 @@ const copy = {
     boundIdentityBody: "当前聊天从商城页面发起，系统已识别会员身份，你只需要填写咨询详情即可开始会话。",
     externalUserIdLabel: "会员 ID",
     sessionReadyTitle: "当前会话已连接",
-
     visitorLabel: "访客",
     sessionIdLabel: "会话 ID",
     noEmail: "未填写",
@@ -141,13 +139,13 @@ const copy = {
     restoring: "恢复中",
     restoringSession: "正在恢复你的聊天记录...",
     emptyTitle: "还没有消息",
-    emptyBody: "填写信息并发送第一条消息后，这里会展示完整会话记录。",
+    emptyBody: "填写信息并发送第一条消息后，这里会显示完整会话记录。",
     loadingMessages: "正在拉取聊天记录...",
     composerPlaceholder: "输入消息，或给图片加一句说明",
     composerLockedPlaceholder: "请先创建会话",
     composerHint: "回车发送，Shift + Enter 换行。",
     sendMessage: "发送",
-    chooseImage: "照片",
+    chooseImage: "图片",
     emojiLabel: "表情",
     selectedImage: "已选图片",
     removeImage: "移除",
@@ -161,7 +159,6 @@ const copy = {
     imageSelectedToast: "图片已选择，点击发送即可上传并发出。",
   },
 } as const;
-
 const fallbackWidgetSettings: WidgetSettings = {
   enabled: true,
   brand_name: "Support assistant",
@@ -604,7 +601,7 @@ export default function ChatClient() {
 
     if (prepare.driver === "qiniu") {
       if (!prepare.upload_url || !prepare.upload_token || !prepare.key || !prepare.url) {
-        throw new Error("七牛上传配置不完整");
+        throw new Error("Upload configuration is incomplete");
       }
 
       const formData = new FormData();
@@ -620,7 +617,7 @@ export default function ChatClient() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "图片上传失败");
+        throw new Error(errorText || "Image upload failed");
       }
 
       return {
@@ -811,18 +808,18 @@ export default function ChatClient() {
                         <p className="mt-1 text-sm text-cyan-100/90">{t.boundIdentityBody}</p>
                         <div className="mt-3 grid gap-1 text-xs text-cyan-100/85 sm:grid-cols-2">
                           <p className="break-all">
-                            <span className="text-cyan-200">{t.externalUserIdLabel}：</span>
+                            <span className="text-cyan-200">{t.externalUserIdLabel}: </span>
                             {boundCustomer.externalUserId}
                           </p>
                           {boundCustomer.name ? (
                             <p>
-                              <span className="text-cyan-200">{t.nameLabel}：</span>
+                              <span className="text-cyan-200">{t.nameLabel}: </span>
                               {boundCustomer.name}
                             </p>
                           ) : null}
                           {boundCustomer.email ? (
                             <p className="break-all sm:col-span-2">
-                              <span className="text-cyan-200">{t.emailLabel}：</span>
+                              <span className="text-cyan-200">{t.emailLabel}: </span>
                               {boundCustomer.email}
                             </p>
                           ) : null}
@@ -879,21 +876,21 @@ export default function ChatClient() {
                 <p className="font-medium text-white">{t.sessionReadyTitle}</p>
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
                   <p>
-                    <span className="text-slate-300">{t.visitorLabel}：</span>
+                    <span className="text-slate-300">{t.visitorLabel}: </span>
                     {session.customerName}
                   </p>
                   <p>
-                    <span className="text-slate-300">{t.emailLabel}：</span>
+                    <span className="text-slate-300">{t.emailLabel}: </span>
                     {session.customerEmail || t.noEmail}
                   </p>
                   {session.externalUserId ? (
                     <p className="break-all">
-                      <span className="text-slate-300">{t.externalUserIdLabel}：</span>
+                      <span className="text-slate-300">{t.externalUserIdLabel}: </span>
                       {session.externalUserId}
                     </p>
                   ) : null}
                   <p className="sm:col-span-2 break-all">
-                    <span className="text-slate-300">{t.sessionIdLabel}：</span>
+                    <span className="text-slate-300">{t.sessionIdLabel}: </span>
                     {session.conversationId}
                   </p>
                 </div>
@@ -948,7 +945,9 @@ export default function ChatClient() {
                       avatarFallback={isSelfMessage ? session?.customerName || boundCustomer?.externalUserId || t.visitorLabel : supportLabel}
                       avatarLabel={isSelfMessage ? session?.customerName || t.visitorLabel : supportLabel}
                       avatarUrl={isSelfMessage ? visitorAvatarUrl : supportAvatarUrl}
+                      editedLabel={locale === "zh" ? "已编辑" : "Edited"}
                       message={message}
+                      recalledMessageLabel={locale === "zh" ? "该消息已撤回" : "This message was recalled"}
                       self={isSelfMessage}
                       showAvatar={!isSelfMessage}
                       showSenderName={false}
@@ -1042,3 +1041,5 @@ export default function ChatClient() {
     </div>
   );
 }
+
+

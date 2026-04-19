@@ -771,6 +771,7 @@ export default function InboxPage() {
 
                 return (
                   <MessageBubble
+                    editedLabel="已编辑"
                     footerActions={
                       canMutateMessage ? (
                         <div className="flex items-center gap-1">
@@ -794,6 +795,7 @@ export default function InboxPage() {
                     }
                     key={message.id}
                     message={message}
+                    recalledMessageLabel="该消息已撤回"
                     self={isSelf}
                     timestamp={format(new Date(message.created_at), "HH:mm")}
                   />

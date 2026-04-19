@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
 
@@ -13,6 +14,8 @@ type MessageBubbleProps = {
   avatarLabel?: string;
   avatarFallback?: string;
   footerActions?: ReactNode;
+  editedLabel?: string;
+  recalledMessageLabel?: string;
 };
 
 function buildAvatarFallback(value: string) {
@@ -63,12 +66,14 @@ export function MessageBubble({
   avatarLabel,
   avatarFallback,
   footerActions,
+  editedLabel = "已编辑",
+  recalledMessageLabel = "该消息已撤回",
 }: MessageBubbleProps) {
   const type = message.message_type ?? (message.media_url ? "image" : "text");
   const senderLabel = message.sender_name || message.sender_type;
   const isRecalled = Boolean(message.recalled_at);
-  const statusText = [timestamp, message.edited_at && !isRecalled ? "已编辑" : ""].filter(Boolean).join(" · ");
-  const metaText = showSenderName ? `${senderLabel} · ${statusText}` : statusText;
+  const statusText = [timestamp, env.showEditedLabel && message.edited_at && !isRecalled ? editedLabel : ""].filter(Boolean).join(" · ");
+  const metaText = showSenderName ? [senderLabel, statusText].filter(Boolean).join(" · ") : statusText;
   const resolvedAvatarLabel = avatarLabel || senderLabel;
   const resolvedAvatarFallback = buildAvatarFallback(avatarFallback || resolvedAvatarLabel);
 
@@ -83,7 +88,9 @@ export function MessageBubble({
         )}
       >
         {isRecalled ? (
-          <p className={cn("leading-6 italic", self ? "text-slate-200" : "text-slate-500")}>{message.content || "该消息已撤回"}</p>
+          <p className={cn("leading-6 italic", self ? "text-slate-200" : "text-slate-500")}>
+            {env.showRecalledMessage ? recalledMessageLabel : ""}
+          </p>
         ) : type === "image" && message.media_url ? (
           <div className="space-y-3">
             <a href={message.media_url} rel="noreferrer" target="_blank">

@@ -6,4 +6,6 @@ export const env = {
   pusherHost: process.env.NEXT_PUBLIC_PUSHER_HOST || "",
   pusherPort: process.env.NEXT_PUBLIC_PUSHER_PORT || "",
   pusherWsPath: process.env.NEXT_PUBLIC_PUSHER_WS_PATH || "",
+  showEditedLabel: process.env.NEXT_PUBLIC_SHOW_EDITED_LABEL !== "false",
+  showRecalledMessage: process.env.NEXT_PUBLIC_SHOW_RECALLED_MESSAGE !== "false",
 };
