@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useStickyChatScroll } from "@/hooks/use-sticky-chat-scroll";
 import { api } from "@/lib/api";
+import { getPusherClient } from "@/lib/pusher";
 import { cn } from "@/lib/utils";
 import type { ImageUploadPrepareResponse, Message, MessagePage, UploadImageResponse, VisitorSessionResponse, WidgetSettings } from "@/types";
 
@@ -335,6 +336,8 @@ export default function ChatClient() {
   const [initialMessage, setInitialMessage] = useState<string>(formDefaults.en.initialMessage);
   const [composer, setComposer] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [agentTyping, setAgentTyping] = useState(false);
+  const pusherClient = useMemo(() => getPusherClient(), []);
 
   const widgetSettingsQuery = useQuery({
     queryKey: ["public-widget-settings"],
@@ -409,7 +412,7 @@ export default function ChatClient() {
         authToken: session.accessToken,
       });
     },
-    refetchInterval: 3000,
+    refetchInterval: pusherClient ? false : 3000,
     retry: false,
   });
 
@@ -450,6 +453,37 @@ export default function ChatClient() {
     persistSession(null);
     setSession(null);
   }, [messagesQuery.error, t.sessionExpired]);
+
+  useEffect(() => {
+    if (!pusherClient || !session?.conversationId) {
+      return;
+    }
+
+    const channel = pusherClient.subscribe(`conversation_${session.conversationId}`);
+
+    const handleMessage = (payload: Message) => {
+      queryClient.setQueryData<MessagePage>(["public-messages", session.conversationId], (previous: MessagePage | undefined) =>
+        appendMessagePage(previous, payload),
+      );
+    };
+
+    const handleTyping = (payload: { is_typing: boolean }) => {
+      setAgentTyping(Boolean(payload?.is_typing));
+      if (payload?.is_typing) {
+        window.setTimeout(() => setAgentTyping(false), 1800);
+      }
+    };
+
+    channel.bind("new_message", handleMessage);
+    channel.bind("typing", handleTyping);
+
+    return () => {
+      channel.unbind("new_message", handleMessage);
+      channel.unbind("typing", handleTyping);
+      pusherClient.unsubscribe(`conversation_${session.conversationId}`);
+      setAgentTyping(false);
+    };
+  }, [pusherClient, queryClient, session?.conversationId]);
 
   useEffect(() => {
     if (!session?.conversationId || messages.length === 0) {
@@ -904,6 +938,7 @@ export default function ChatClient() {
                     />
                   );
                 })}
+                {agentTyping ? <div className="text-sm text-slate-400">Support is typing...</div> : null}
                 <div ref={bottomAnchorRef} className="h-px w-full" />
               </div>
 
