@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ArrowLeft, ImagePlus, Loader2, SendHorizonal, SquarePen, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { MessageBubble } from "@/components/chat/message-bubble";
@@ -95,6 +95,15 @@ function persistCustomerNotes(notes: Record<string, CustomerNoteRecord>) {
   localStorage.setItem(customerNotesStorageKey, JSON.stringify(notes));
 }
 
+function getConversationPreview(conversation: Conversation, note?: string) {
+  const trimmedNote = note?.trim();
+  if (trimmedNote) {
+    return `备注：${trimmedNote}`;
+  }
+
+  return conversation.last_message || "暂无最新消息";
+}
+
 function appendMessagePage(previous: MessagePage | undefined, message: Message): MessagePage {
   const items = previous?.items ?? [];
   const deduped = new Map(items.map((item) => [item.id, item]));
@@ -144,6 +153,7 @@ export default function InboxPage() {
   const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
   const latestMessageKeyRef = useRef("");
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+  const shouldForceScrollRef = useRef(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
 
   const {
@@ -325,7 +335,7 @@ export default function InboxPage() {
       toast.success("会话分类已更新");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "更新会话分类失败");
+      toast.error(error instanceof Error ? error.message : "加载错误了...");
     },
   });
 
@@ -341,6 +351,19 @@ export default function InboxPage() {
       window.requestAnimationFrame(() => run("auto"));
     });
   }
+
+  useLayoutEffect(() => {
+    if (!activeConversationId || messagesQuery.isLoading || mergedMessages.length === 0) {
+      return;
+    }
+
+    if (!shouldForceScrollRef.current) {
+      return;
+    }
+
+    shouldForceScrollRef.current = false;
+    scrollChatToBottom("auto");
+  }, [activeConversationId, mergedMessages.length, messagesQuery.isLoading]);
 
   useEffect(() => {
     const currentUnreadMap = Object.fromEntries(conversations.map((conversation) => [conversation.id, conversation.unread_count]));
@@ -542,6 +565,7 @@ export default function InboxPage() {
       setComposer("");
       clearPendingImage();
     }
+    shouldForceScrollRef.current = true;
     setSelectedConversationId(conversationId);
     setMobilePanel("chat");
   }
@@ -633,7 +657,7 @@ export default function InboxPage() {
               onChange={(event) => setCategoryFilter(event.target.value)}
               value={categoryFilter}
             >
-              <option value="">全部会话</option>
+              <option value="">会话列表</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -646,7 +670,7 @@ export default function InboxPage() {
         <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           {conversationQuery.isLoading ? (
             <div className="flex h-48 items-center justify-center text-slate-500">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在拉取会话...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中...
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-center text-sm text-slate-500">
@@ -674,7 +698,7 @@ export default function InboxPage() {
                         <p className="truncate font-semibold text-slate-900">{conversation.customer.name}</p>
                         {note ? <Badge variant="warning">有备注</Badge> : null}
                       </div>
-                      <p className="mt-1 line-clamp-2 text-sm text-slate-500">{conversation.last_message || "暂无最新消息"}</p>
+                      <p className={cn("mt-1 line-clamp-2 text-sm", note ? "text-amber-700" : "text-slate-500")}>{getConversationPreview(conversation, note)}</p>
                     </div>
                     {conversation.unread_count > 0 ? <Badge variant="info">{conversation.unread_count}</Badge> : null}
                   </div>
@@ -703,7 +727,7 @@ export default function InboxPage() {
             <div className="min-w-0">
               <CardTitle className="truncate">{selectedCustomer?.name}</CardTitle>
               <CardDescription className="mt-1 truncate">
-                {[selectedCustomer?.source, selectedCustomer?.email].filter(Boolean).join(" · ") || "当前客户暂无更多基础信息"}
+                {[selectedCustomer?.source, selectedCustomer?.email].filter(Boolean).join(" / ") || "当前客户暂无更多基础信息"}
               </CardDescription>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -758,11 +782,11 @@ export default function InboxPage() {
                       />
                       <div className="mt-3 flex justify-end gap-2">
                         <Button onClick={cancelEditingMessage} size="sm" type="button" variant="ghost">
-                          取消
+                          鍙栨秷
                         </Button>
                         <Button disabled={updateMessageMutation.isPending || editingMessageDraft.trim().length === 0} onClick={submitEditingMessage} size="sm" type="button">
                           {updateMessageMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          保存
+                          淇濆瓨
                         </Button>
                       </div>
                     </div>
@@ -888,7 +912,7 @@ export default function InboxPage() {
         <CardHeader className="shrink-0 border-b border-slate-100 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>客户备注</CardTitle> 
+              <CardTitle>客户备注</CardTitle>
             </div>
             <div className="flex items-center gap-2 xl:hidden">
               <Button onClick={handleBackToList} size="sm" type="button" variant="ghost">
@@ -1028,3 +1052,5 @@ export default function InboxPage() {
     </div>
   );
 }
+
+

@@ -75,7 +75,7 @@ export default function LoginPage() {
                 <label className="text-sm font-medium text-slate-700">密码</label>
                 <Input placeholder="请输入登录密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </div>
-              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">出于安全考虑，登录页不再预填默认账号密码，请使用你自己的客服账号登录。</p>
+             
               <Button className="w-full" disabled={submitting || !email.trim() || !password.trim()}>
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
                 进入工作台
