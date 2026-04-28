@@ -148,7 +148,6 @@ export default function InboxPage() {
   const [noteDraft, setNoteDraft] = useState("");
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingMessageDraft, setEditingMessageDraft] = useState("");
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
   const latestMessageKeyRef = useRef("");
@@ -280,8 +279,12 @@ export default function InboxPage() {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       };
 
-      const handleTyping = (payload: { is_typing: boolean }) => {
+      const handleTyping = (payload: { is_typing: boolean; sender_type?: string }) => {
         if (conversationId !== activeConversationId) {
+          return;
+        }
+        if (payload.sender_type !== "user") {
+          setTyping(conversationId, false);
           return;
         }
         setTyping(conversationId, payload.is_typing);
@@ -474,19 +477,6 @@ export default function InboxPage() {
       toast.error(error instanceof Error ? error.message : "撤回消息失败");
     },
   });
-
-  async function emitTyping() {
-    if (!activeConversationId) return;
-
-    try {
-      await api.post("/api/conversations/typing", {
-        conversation_id: activeConversationId,
-        is_typing: true,
-      });
-    } catch {
-      // ignore typing errors
-    }
-  }
 
   async function uploadPendingImageFile(file: File): Promise<UploadImageResponse> {
     const prepare = await api.post<ImageUploadPrepareResponse>("/api/upload/image/prepare", {
@@ -738,7 +728,7 @@ export default function InboxPage() {
                 onChange={(event) => handleCategoryChange(event.target.value)}
                 value={selectedConversation?.category_id ?? ""}
               >
-                <option value="">Uncategorized</option>
+                <option value="">未分类</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -782,11 +772,11 @@ export default function InboxPage() {
                       />
                       <div className="mt-3 flex justify-end gap-2">
                         <Button onClick={cancelEditingMessage} size="sm" type="button" variant="ghost">
-                          鍙栨秷
+                          取消
                         </Button>
                         <Button disabled={updateMessageMutation.isPending || editingMessageDraft.trim().length === 0} onClick={submitEditingMessage} size="sm" type="button">
                           {updateMessageMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          淇濆瓨
+                         保存
                         </Button>
                       </div>
                     </div>
@@ -862,18 +852,7 @@ export default function InboxPage() {
 
               placeholder="输入消息，回车发送，Shift + Enter 换行"
               value={composer}
-              onChange={(event) => {
-                setComposer(event.target.value);
-                if (typingTimer.current) clearTimeout(typingTimer.current);
-                void emitTyping();
-                typingTimer.current = setTimeout(() => {
-                  if (!activeConversationId) return;
-                  void api.post("/api/conversations/typing", {
-                    conversation_id: activeConversationId,
-                    is_typing: false,
-                  });
-                }, 1200);
-              }}
+              onChange={(event) => setComposer(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();

@@ -326,6 +326,7 @@ export default function ChatClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestMessageKeyRef = useRef("");
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
 
@@ -343,7 +344,6 @@ export default function ChatClient() {
   const [initialMessage, setInitialMessage] = useState<string>(formDefaults.en.initialMessage);
   const [composer, setComposer] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
-  const [agentTyping, setAgentTyping] = useState(false);
   const pusherClient = useMemo(() => getPusherClient(), []);
 
   const widgetSettingsQuery = useQuery({
@@ -387,6 +387,9 @@ export default function ChatClient() {
 
   useEffect(() => {
     return () => {
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
       if (pendingImage) {
         URL.revokeObjectURL(pendingImage.previewUrl);
       }
@@ -474,13 +477,6 @@ export default function ChatClient() {
       );
     };
 
-    const handleTyping = (payload: { is_typing: boolean }) => {
-      setAgentTyping(Boolean(payload?.is_typing));
-      if (payload?.is_typing) {
-        window.setTimeout(() => setAgentTyping(false), 1800);
-      }
-    };
-
     const handleMessageUpdated = (payload: Message) => {
       queryClient.setQueryData<MessagePage>(["public-messages", session.conversationId], (previous: MessagePage | undefined) =>
         updateMessagePage(previous, payload),
@@ -489,14 +485,11 @@ export default function ChatClient() {
 
     channel.bind("new_message", handleMessage);
     channel.bind("message_updated", handleMessageUpdated);
-    channel.bind("typing", handleTyping);
 
     return () => {
       channel.unbind("new_message", handleMessage);
       channel.unbind("message_updated", handleMessageUpdated);
-      channel.unbind("typing", handleTyping);
       pusherClient.unsubscribe(`conversation_${session.conversationId}`);
-      setAgentTyping(false);
     };
   }, [pusherClient, queryClient, session?.conversationId]);
 
@@ -584,6 +577,25 @@ export default function ChatClient() {
     );
   }
 
+  async function emitVisitorTyping(isTyping: boolean) {
+    if (!session) {
+      return;
+    }
+
+    try {
+      await api.post(
+        "/api/public/typing",
+        {
+          conversation_id: session.conversationId,
+          is_typing: isTyping,
+        },
+        { authToken: session.accessToken },
+      );
+    } catch {
+      // ignore typing errors
+    }
+  }
+
   async function uploadPendingImageFile(file: File): Promise<UploadImageResponse> {
     if (!session) {
       throw new Error(t.createSessionRequired);
@@ -664,6 +676,11 @@ export default function ChatClient() {
       });
     },
     onSuccess: (message) => {
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      void emitVisitorTyping(false);
       setComposer("");
       if (pendingImage) {
         URL.revokeObjectURL(pendingImage.previewUrl);
@@ -681,6 +698,10 @@ export default function ChatClient() {
   });
 
   function resetSession() {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
     persistSession(null);
     setSession(null);
     setComposer("");
@@ -955,7 +976,6 @@ export default function ChatClient() {
                     />
                   );
                 })}
-                {agentTyping ? <div className="text-sm text-slate-400">Support is typing...</div> : null}
                 <div ref={bottomAnchorRef} className="h-px w-full" />
               </div>
 
@@ -1012,7 +1032,20 @@ export default function ChatClient() {
                 disabled={!session || sendMessageMutation.isPending}
                 placeholder={session ? t.composerPlaceholder : t.composerLockedPlaceholder}
                 value={composer}
-                onChange={(event) => setComposer(event.target.value)}
+                onChange={(event) => {
+                  setComposer(event.target.value);
+                  if (!session) {
+                    return;
+                  }
+                  if (typingTimerRef.current) {
+                    clearTimeout(typingTimerRef.current);
+                  }
+                  void emitVisitorTyping(true);
+                  typingTimerRef.current = setTimeout(() => {
+                    typingTimerRef.current = null;
+                    void emitVisitorTyping(false);
+                  }, 1200);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
