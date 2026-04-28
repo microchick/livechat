@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStickyChatScroll } from "@/hooks/use-sticky-chat-scroll";
 import { api } from "@/lib/api";
+import { env } from "@/lib/env";
 import { getPusherClient } from "@/lib/pusher";
 import { cn } from "@/lib/utils";
 import { useInboxStore } from "@/store/inbox-store";
@@ -148,6 +149,7 @@ export default function InboxPage() {
   const [noteDraft, setNoteDraft] = useState("");
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingMessageDraft, setEditingMessageDraft] = useState("");
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previousUnreadMapRef = useRef<Record<string, number> | null>(null);
   const latestMessageKeyRef = useRef("");
@@ -238,6 +240,9 @@ export default function InboxPage() {
 
   useEffect(() => {
     return () => {
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current);
+      }
       if (pendingImage) {
         URL.revokeObjectURL(pendingImage.previewUrl);
       }
@@ -281,6 +286,10 @@ export default function InboxPage() {
 
       const handleTyping = (payload: { is_typing: boolean; sender_type?: string }) => {
         if (conversationId !== activeConversationId) {
+          return;
+        }
+        if (!env.showInboxTypingIndicator) {
+          setTyping(conversationId, false);
           return;
         }
         if (payload.sender_type !== "user") {
@@ -430,6 +439,11 @@ export default function InboxPage() {
       });
     },
     onSuccess: (message) => {
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current);
+        typingTimer.current = null;
+      }
+      void emitAgentTyping(false);
       setComposer("");
       if (pendingImage) {
         URL.revokeObjectURL(pendingImage.previewUrl);
@@ -477,6 +491,21 @@ export default function InboxPage() {
       toast.error(error instanceof Error ? error.message : "撤回消息失败");
     },
   });
+
+  async function emitAgentTyping(isTyping: boolean) {
+    if (!activeConversationId || !env.showChatTypingIndicator) {
+      return;
+    }
+
+    try {
+      await api.post("/api/conversations/typing", {
+        conversation_id: activeConversationId,
+        is_typing: isTyping,
+      });
+    } catch {
+      // ignore typing errors
+    }
+  }
 
   async function uploadPendingImageFile(file: File): Promise<UploadImageResponse> {
     const prepare = await api.post<ImageUploadPrepareResponse>("/api/upload/image/prepare", {
@@ -552,6 +581,11 @@ export default function InboxPage() {
 
   function handleSelectConversation(conversationId: string) {
     if (selectedConversationId !== conversationId) {
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current);
+        typingTimer.current = null;
+      }
+      void emitAgentTyping(false);
       setComposer("");
       clearPendingImage();
     }
@@ -815,7 +849,7 @@ export default function InboxPage() {
                   />
                 );
               })}
-              {activeConversationId && typingConversationIds[activeConversationId] ? <div className="text-sm text-slate-400">对方正在输入...</div> : null}
+              {env.showInboxTypingIndicator && activeConversationId && typingConversationIds[activeConversationId] ? <div className="text-sm text-slate-400">对方正在输入...</div> : null}
               <div ref={bottomAnchorRef} className="h-px w-full" />
             </div>
 
@@ -852,7 +886,20 @@ export default function InboxPage() {
 
               placeholder="输入消息，回车发送，Shift + Enter 换行"
               value={composer}
-              onChange={(event) => setComposer(event.target.value)}
+              onChange={(event) => {
+                setComposer(event.target.value);
+                if (!activeConversationId || !env.showChatTypingIndicator) {
+                  return;
+                }
+                if (typingTimer.current) {
+                  clearTimeout(typingTimer.current);
+                }
+                void emitAgentTyping(true);
+                typingTimer.current = setTimeout(() => {
+                  typingTimer.current = null;
+                  void emitAgentTyping(false);
+                }, 1200);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();

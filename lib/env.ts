@@ -6,6 +6,8 @@ export const env = {
   pusherHost: process.env.NEXT_PUBLIC_PUSHER_HOST || "",
   pusherPort: process.env.NEXT_PUBLIC_PUSHER_PORT || "",
   pusherWsPath: process.env.NEXT_PUBLIC_PUSHER_WS_PATH || "",
+  showInboxTypingIndicator: process.env.NEXT_PUBLIC_SHOW_INBOX_TYPING_INDICATOR !== "false",
+  showChatTypingIndicator: process.env.NEXT_PUBLIC_SHOW_CHAT_TYPING_INDICATOR !== "false",
   showEditedLabel: process.env.NEXT_PUBLIC_SHOW_EDITED_LABEL !== "false",
   showRecalledMessage: process.env.NEXT_PUBLIC_SHOW_RECALLED_MESSAGE !== "false",
 };

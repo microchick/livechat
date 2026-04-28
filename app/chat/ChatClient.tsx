@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useStickyChatScroll } from "@/hooks/use-sticky-chat-scroll";
 import { api } from "@/lib/api";
+import { env } from "@/lib/env";
 import { getPusherClient } from "@/lib/pusher";
 import { cn } from "@/lib/utils";
 import type { ImageUploadPrepareResponse, Message, MessagePage, UploadImageResponse, VisitorSessionResponse, WidgetSettings } from "@/types";
@@ -97,6 +98,7 @@ const copy = {
     chooseImage: "Photo",
     emojiLabel: "Emoji",
     selectedImage: "Selected photo",
+    supportTyping: "Support is typing...",
     removeImage: "Remove",
     sessionMissing: "Visitor session not found",
     sessionExpired: "Visitor session expired",
@@ -148,6 +150,7 @@ const copy = {
     chooseImage: "图片",
     emojiLabel: "表情",
     selectedImage: "已选图片",
+    supportTyping: "客服正在输入...",
     removeImage: "移除",
     sessionMissing: "访客会话不存在",
     sessionExpired: "访客会话已失效",
@@ -343,6 +346,7 @@ export default function ChatClient() {
   const [email, setEmail] = useState<string>(initialFormEmail);
   const [initialMessage, setInitialMessage] = useState<string>(formDefaults.en.initialMessage);
   const [composer, setComposer] = useState("");
+  const [agentTyping, setAgentTyping] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const pusherClient = useMemo(() => getPusherClient(), []);
 
@@ -390,6 +394,7 @@ export default function ChatClient() {
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current);
       }
+      setAgentTyping(false);
       if (pendingImage) {
         URL.revokeObjectURL(pendingImage.previewUrl);
       }
@@ -483,13 +488,31 @@ export default function ChatClient() {
       );
     };
 
+    const handleTyping = (payload: { is_typing: boolean; sender_type?: string }) => {
+      if (!env.showChatTypingIndicator) {
+        setAgentTyping(false);
+        return;
+      }
+      if (payload.sender_type !== "agent") {
+        setAgentTyping(false);
+        return;
+      }
+      setAgentTyping(Boolean(payload?.is_typing));
+      if (payload?.is_typing) {
+        window.setTimeout(() => setAgentTyping(false), 1800);
+      }
+    };
+
     channel.bind("new_message", handleMessage);
     channel.bind("message_updated", handleMessageUpdated);
+    channel.bind("typing", handleTyping);
 
     return () => {
       channel.unbind("new_message", handleMessage);
       channel.unbind("message_updated", handleMessageUpdated);
+      channel.unbind("typing", handleTyping);
       pusherClient.unsubscribe(`conversation_${session.conversationId}`);
+      setAgentTyping(false);
     };
   }, [pusherClient, queryClient, session?.conversationId]);
 
@@ -578,7 +601,7 @@ export default function ChatClient() {
   }
 
   async function emitVisitorTyping(isTyping: boolean) {
-    if (!session) {
+    if (!session || !env.showInboxTypingIndicator) {
       return;
     }
 
@@ -976,6 +999,7 @@ export default function ChatClient() {
                     />
                   );
                 })}
+                {env.showChatTypingIndicator && agentTyping ? <div className="text-sm text-slate-400">{t.supportTyping}</div> : null}
                 <div ref={bottomAnchorRef} className="h-px w-full" />
               </div>
 
@@ -1034,7 +1058,7 @@ export default function ChatClient() {
                 value={composer}
                 onChange={(event) => {
                   setComposer(event.target.value);
-                  if (!session) {
+                  if (!session || !env.showInboxTypingIndicator) {
                     return;
                   }
                   if (typingTimerRef.current) {
